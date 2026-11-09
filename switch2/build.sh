@@ -11,15 +11,8 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build-switch2"
-PATCH="$ROOT/switch2/libultraship-switch2.patch"
 
-# Apply the libultraship changes unless they are applied already.
-if git -C "$ROOT/libultraship" apply --reverse --check "$PATCH" 2>/dev/null; then
-    echo "libultraship patch: already applied"
-else
-    git -C "$ROOT/libultraship" apply "$PATCH"
-    echo "libultraship patch: applied"
-fi
+git -C "$ROOT" submodule update --init --recursive
 
 cmake -H"$ROOT" -B"$BUILD" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ROOT/switch2/cmake/Switch2.cmake" \

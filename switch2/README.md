@@ -36,8 +36,7 @@ bundled fmt library does not compile there.
 sh switch2/build.sh
 ```
 
-The script applies `libultraship-switch2.patch` to the libultraship
-submodule, builds `soh.nro`, and puts it with the OTR files in
+The script updates the submodules, builds `soh.nro`, and puts it with the OTR files in
 `build-switch2/dist/switch/soh/`. Copy that `switch` folder to the root of the
 SD card and start the NRO from hbloader.
 
@@ -47,7 +46,9 @@ SD card and start the NRO from hbloader.
   pointed at libounce, with the Switch 2 portlibs first.
 - `cmake/Platform/NintendoSwitch.cmake`: adds `-D__SWITCH2__` and the Switch 2
   library path to devkitPro's platform settings.
-- `libultraship-switch2.patch`: on Switch 2, the CPU clock table of the
-  Switch 1 is not applied, and the display size is 1920x1080 in both modes.
+- `libultraship` (submodule, `ounce` branch of
+  <https://github.com/mysterypaintwo/libultraship-Switch2>): on Switch 2, the
+  CPU clock table of the Switch 1 is not applied, and the display size is
+  1920x1080 in both modes.
 - `soh/soh/SohMenuBar.cpp`: the "Switch performance mode" menu is hidden on
   Switch 2.
