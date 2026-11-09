@@ -1259,7 +1259,7 @@ void DrawEnhancementsMenu() {
         ImGui::PopStyleVar(3);
         ImGui::PopStyleColor(1);
 
-        #ifdef __SWITCH__
+        #if defined(__SWITCH__) && !defined(__SWITCH2__)
         UIWidgets::Spacer(0);
         ImGui::Text("Switch performance mode");
         if (UIWidgets::EnhancementCombobox("gSwitchPerfMode", SWITCH_CPU_PROFILES, (int)LUS::SwitchProfiles::STOCK)) {
