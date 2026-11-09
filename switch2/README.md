@@ -36,9 +36,19 @@ bundled fmt library does not compile there.
 sh switch2/build.sh
 ```
 
-The script updates the submodules, builds `soh.nro`, and puts it with the OTR files in
-`build-switch2/dist/switch/soh/`. Copy that `switch` folder to the root of the
-SD card and start the NRO from hbloader.
+The script updates the submodules, builds `soh.nro`, and makes the release
+archive `build-switch2/soh-switch2.zip`. The archive has `switch/soh/soh.nro`
+and `switch/soh/soh.otr` only. To make a ROM-free `soh.otr`, run
+`cmake --build build-cmake --target GenerateSohOtr`.
+
+`oot.otr` and `oot-mq.otr` are made from a ROM, so they are never distributed.
+Each player makes their own from their own ROM (see above).
+
+## Install on the console
+
+1. Unzip `soh-switch2.zip` to the root of the SD card.
+2. Copy your own `oot.otr` or `oot-mq.otr` to `/switch/soh/`.
+3. Start `soh.nro` from hbloader.
 
 ## Changes for Switch 2
 
