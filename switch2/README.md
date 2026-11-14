@@ -49,8 +49,33 @@ Each player makes their own from their own ROM (see above).
 ## Install on the console
 
 1. Unzip `soh-switch2.zip` to the root of the SD card.
-2. Copy your own `oot.otr` or `oot-mq.otr` to `/switch/soh/`.
-3. Start `soh.nro` from hbloader.
+2. Copy your own `oot.otr`, `oot-mq.otr`, or both to `/switch/soh/`.
+3. Start "HarbourMasters - Shipwright" from the homebrew menu.
+
+Which quest you get depends on the files:
+
+- Only `oot-mq.otr` (made from a Master Quest ROM): every file is Master
+  Quest. This is by design, not a bug.
+- Only `oot.otr` (made from a vanilla ROM): every file is the original quest.
+- Both: you pick the quest when you make a new file.
+
+This build supports the PAL ROMs (PAL 1.0, PAL 1.1, PAL GameCube and PAL
+Master Quest, see `docs/supportedHashes.json`). They have English, German
+and French text: pick the language in Settings > Languages.
+
+## Playing
+
+- Press `-` to open the menu.
+- Default buttons: B is A, Y is B, A is C-down, X is C-left, R is C-right,
+  ZL is Z, ZR is R. The right stick is also the C buttons. If you played an
+  earlier build, your saved controls stay: reset them in the controller
+  settings to get these.
+- Quit: Ship > Quit to Homebrew Menu goes back to the homebrew menu.
+  Closing the game from the HOME menu also works.
+- 120 FPS: on the Switch 2 screen, set the FPS slider in Graphics above 60.
+  With vsync on, the game is held to the display's refresh rate (120 Hz
+  handheld, 60 Hz on most TVs).
+- Bug reports: the log is in `/switch/soh/logs/`. Send it with the report.
 
 ## Changes for Switch 2
 

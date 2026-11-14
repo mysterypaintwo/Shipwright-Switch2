@@ -1099,6 +1099,10 @@ extern "C" void SaveManager_ThreadPoolWait() {
     SaveManager::Instance->ThreadPoolWait();
 }
 
+#ifdef __SWITCH__
+void gfx_sdl_shutdown(void); // libultraship gfx_sdl2.cpp
+#endif
+
 extern "C" void DeinitOTR() {
     SaveManager_ThreadPoolWait();
     OTRAudio_Exit();
@@ -1111,6 +1115,11 @@ extern "C" void DeinitOTR() {
     SohGui::Destroy();
 
     OTRGlobals::Instance->context = nullptr;
+#ifdef __SWITCH__
+    // Close GL and SDL only now that the audio thread and the GUI are gone,
+    // so the app returns to the homebrew menu instead of crashing.
+    gfx_sdl_shutdown();
+#endif
 }
 
 #ifdef _WIN32

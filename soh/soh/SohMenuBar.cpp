@@ -1,4 +1,6 @@
 #include "SohMenuBar.h"
+#include <cfloat>
+#include <unordered_map>
 #include "ImGui/imgui.h"
 #include "public/bridge/consolevariablebridge.h"
 #include <libultraship/libultraship.h>
@@ -50,6 +52,25 @@ std::string GetWindowButtonText(const char* text, bool menuOpen) {
     return buttonText;
 }
             
+// A menu popup fits its contents, and sliders and combos size themselves from
+// the popup's width, so an open menu grew a little every frame. Keep the width
+// a menu has once it has opened.
+static bool BeginFixedWidthMenu(const char* label, bool enabled = true) {
+    static std::unordered_map<ImGuiID, float> sMenuWidths;
+    const ImGuiID id = ImGui::GetID(label);
+    auto width = sMenuWidths.find(id);
+    if (width != sMenuWidths.end()) {
+        ImGui::SetNextWindowSizeConstraints(ImVec2(width->second, 0.0f), ImVec2(width->second, FLT_MAX));
+    }
+    if (!ImGui::BeginMenu(label, enabled)) {
+        return false;
+    }
+    if (width == sMenuWidths.end() && !ImGui::IsWindowAppearing()) {
+        sMenuWidths[id] = ImGui::GetWindowWidth();
+    }
+    return true;
+}
+
 static std::unordered_map<LUS::WindowBackend, const char*> windowBackendNames = {
     { LUS::WindowBackend::DX11, "DirectX" },
     { LUS::WindowBackend::SDL_OPENGL, "OpenGL"},
@@ -152,7 +173,7 @@ void DrawMenuBarIcon() {
 }
 
 void DrawShipMenu() {
-    if (ImGui::BeginMenu("Ship")) {
+    if (BeginFixedWidthMenu("Ship")) {
         if (ImGui::MenuItem("Hide Menu Bar",
 #if !defined(__SWITCH__) && !defined(__WIIU__)
          "F1"
@@ -191,6 +212,11 @@ void DrawShipMenu() {
         if (ImGui::MenuItem("Quit")) {
             LUS::Context::GetInstance()->GetWindow()->Close();
         }
+#elif defined(__SWITCH__)
+        UIWidgets::Spacer(0);
+        if (ImGui::MenuItem("Quit to Homebrew Menu")) {
+            LUS::Context::GetInstance()->GetWindow()->Close();
+        }
 #endif
         ImGui::EndMenu();
     }
@@ -200,9 +226,9 @@ extern std::shared_ptr<LUS::GuiWindow> mInputEditorWindow;
 extern std::shared_ptr<GameControlEditor::GameControlEditorWindow> mGameControlEditorWindow;
 
 void DrawSettingsMenu() {
-    if (ImGui::BeginMenu("Settings"))
+    if (BeginFixedWidthMenu("Settings"))
     {
-        if (ImGui::BeginMenu("Audio")) {
+        if (BeginFixedWidthMenu("Audio")) {
             UIWidgets::PaddedEnhancementSliderFloat("Master Volume: %d %%", "##Master_Vol", "gGameMasterVolume", 0.0f, 1.0f, "", 1.0f, true, true, false, true);
             if (UIWidgets::PaddedEnhancementSliderFloat("Main Music Volume: %d %%", "##Main_Music_Vol", "gMainMusicVolume", 0.0f, 1.0f, "", 1.0f, true, true, false, true)) {
                 Audio_SetGameVolume(SEQ_BGM_MAIN, CVarGetFloat("gMainMusicVolume", 1.0f));
@@ -247,7 +273,7 @@ void DrawSettingsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Controller")) {
+        if (BeginFixedWidthMenu("Controller")) {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2 (12.0f, 6.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
@@ -281,7 +307,7 @@ void DrawSettingsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Graphics")) {
+        if (BeginFixedWidthMenu("Graphics")) {
         #ifndef __APPLE__
             if (UIWidgets::EnhancementSliderFloat("Internal Resolution: %d %%", "##IMul", "gInternalResolution", 0.5f, 2.0f, "", 1.0f, true)) {
                 LUS::Context::GetInstance()->GetWindow()->SetResolutionMultiplier(CVarGetFloat("gInternalResolution", 1));
@@ -463,7 +489,7 @@ void DrawSettingsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Languages")) {
+        if (BeginFixedWidthMenu("Languages")) {
             UIWidgets::PaddedEnhancementCheckbox("Translate Title Screen", "gTitleScreenTranslation");
             if (UIWidgets::EnhancementRadioButton("English", "gLanguages", LANGUAGE_ENG)) {
                 GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSetGameLanguage>();
@@ -479,7 +505,7 @@ void DrawSettingsMenu() {
         
         UIWidgets::Spacer(0);
         
-        if (ImGui::BeginMenu("Accessibility")) {
+        if (BeginFixedWidthMenu("Accessibility")) {
         #if defined(_WIN32) || defined(__APPLE__)
             UIWidgets::PaddedEnhancementCheckbox("Text to Speech", "gA11yTTS");
             UIWidgets::Tooltip("Enables text to speech for in game dialog");
@@ -498,7 +524,7 @@ extern std::shared_ptr<CosmeticsEditorWindow> mCosmeticsEditorWindow;
 extern std::shared_ptr<GameplayStatsWindow> mGameplayStatsWindow;
 
 void DrawEnhancementsMenu() {
-    if (ImGui::BeginMenu("Enhancements"))
+    if (BeginFixedWidthMenu("Enhancements"))
     {
         ImGui::BeginDisabled(CVarGetInteger("gDisableChangingSettings", 0));
 
@@ -506,9 +532,9 @@ void DrawEnhancementsMenu() {
 
         UIWidgets::PaddedSeparator();
 
-        if (ImGui::BeginMenu("Gameplay"))
+        if (BeginFixedWidthMenu("Gameplay"))
         {
-            if (ImGui::BeginMenu("Time Savers"))
+            if (BeginFixedWidthMenu("Time Savers"))
             {
                 UIWidgets::PaddedEnhancementSliderInt("Text Speed: %dx", "##TEXTSPEED", "gTextSpeed", 1, 5, "", 1, true, false, true);
                 UIWidgets::PaddedEnhancementCheckbox("Skip Text", "gSkipText", false, true);
@@ -594,7 +620,7 @@ void DrawEnhancementsMenu() {
 
             UIWidgets::Spacer(0);
 
-            if (ImGui::BeginMenu("Items"))
+            if (BeginFixedWidthMenu("Items"))
             {
                 UIWidgets::PaddedEnhancementCheckbox("Instant Putaway", "gInstantPutaway", true, false);
                 UIWidgets::Tooltip("Allow Link to put items away without having to wait around");
@@ -631,7 +657,7 @@ void DrawEnhancementsMenu() {
 
             UIWidgets::Spacer(0);
 
-            if (ImGui::BeginMenu("Difficulty Options"))
+            if (BeginFixedWidthMenu("Difficulty Options"))
             {
                 ImGui::Text("Damage Multiplier");
                 UIWidgets::EnhancementCombobox("gDamageMul", allPowers, 0);
@@ -700,7 +726,7 @@ void DrawEnhancementsMenu() {
                 UIWidgets::Tooltip("All dogs can be traded in and will count as Richard.");
                 UIWidgets::Spacer(0);
 
-                if (ImGui::BeginMenu("Potion Values"))
+                if (BeginFixedWidthMenu("Potion Values"))
                 {
                     UIWidgets::EnhancementCheckbox("Change Red Potion Effect", "gRedPotionEffect");
                     UIWidgets::Tooltip("Enable the following changes to the amount of health restored by Red Potions");
@@ -789,7 +815,7 @@ void DrawEnhancementsMenu() {
 
                 UIWidgets::Spacer(0);
 
-                if (ImGui::BeginMenu("Shooting Gallery")) {
+                if (BeginFixedWidthMenu("Shooting Gallery")) {
                     UIWidgets::EnhancementCheckbox("Customize Behavior", "gCustomizeShootingGallery");
                     UIWidgets::Tooltip("Turn on/off changes to the shooting gallery behavior");
                     bool disabled = !CVarGetInteger("gCustomizeShootingGallery", 0);
@@ -807,7 +833,7 @@ void DrawEnhancementsMenu() {
 
                 UIWidgets::Spacer(0);
 
-                if (ImGui::BeginMenu("Bombchu Bowling")) {
+                if (BeginFixedWidthMenu("Bombchu Bowling")) {
                     UIWidgets::EnhancementCheckbox("Customize Behavior", "gCustomizeBombchuBowling");
                     UIWidgets::Tooltip("Turn on/off changes to the bombchu bowling behavior");
                     bool disabled = CVarGetInteger("gCustomizeBombchuBowling", 0) == 0;
@@ -823,7 +849,7 @@ void DrawEnhancementsMenu() {
 
                 UIWidgets::Spacer(0);
 
-                if (ImGui::BeginMenu("Fishing")) {
+                if (BeginFixedWidthMenu("Fishing")) {
                     UIWidgets::EnhancementCheckbox("Customize Behavior", "gCustomizeFishing");
                     UIWidgets::Tooltip("Turn on/off changes to the fishing behavior");
                     bool disabled = !CVarGetInteger("gCustomizeFishing", 0);
@@ -846,7 +872,7 @@ void DrawEnhancementsMenu() {
 
             UIWidgets::Spacer(0);
 
-            if (ImGui::BeginMenu("Reduced Clutter"))
+            if (BeginFixedWidthMenu("Reduced Clutter"))
             {
                 UIWidgets::EnhancementCheckbox("Mute Low HP Alarm", "gLowHpAlarm");
                 UIWidgets::Tooltip("Disable the low HP beeping sound");
@@ -912,9 +938,9 @@ void DrawEnhancementsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Graphics"))
+        if (BeginFixedWidthMenu("Graphics"))
         {
-            if (ImGui::BeginMenu("Mods")) {
+            if (BeginFixedWidthMenu("Mods")) {
                 UIWidgets::PaddedEnhancementCheckbox("Use Alternate Assets", "gAltAssets", false, false);
                 UIWidgets::Tooltip("Toggle between standard assets and alternate assets. Usually mods will indicate if this setting has to be used or not.");
                 UIWidgets::PaddedEnhancementCheckbox("Disable Bomb Billboarding", "gDisableBombBillboarding", true, false);
@@ -976,7 +1002,7 @@ void DrawEnhancementsMenu() {
             UIWidgets::PaddedEnhancementCheckbox("Show Gauntlets in First Person", "gFPSGauntlets", true, false);
             UIWidgets::Tooltip("Renders Gauntlets when using the Bow and Hookshot like in OOT3D");
             UIWidgets::Spacer(0);
-            if (ImGui::BeginMenu("Animated Link in Pause Menu")) {
+            if (BeginFixedWidthMenu("Animated Link in Pause Menu")) {
                 ImGui::Text("Rotation");
                 UIWidgets::EnhancementRadioButton("Disabled", "gPauseLiveLinkRotation", 0);
                 UIWidgets::EnhancementRadioButton("Rotate Link with D-pad", "gPauseLiveLinkRotation", 1);
@@ -1036,7 +1062,7 @@ void DrawEnhancementsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Fixes"))
+        if (BeginFixedWidthMenu("Fixes"))
         {
             UIWidgets::EnhancementCheckbox("Fix L&R Pause menu", "gUniformLR");
             UIWidgets::Tooltip("Makes the L and R buttons in the pause menu the same color");
@@ -1103,7 +1129,7 @@ void DrawEnhancementsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Restoration"))
+        if (BeginFixedWidthMenu("Restoration"))
         {
             UIWidgets::EnhancementCheckbox("Authentic Logo Screen", "gAuthenticLogo");
             UIWidgets::Tooltip("Hide the game version and build details and display the authentic model and texture on the boot logo start screen");
@@ -1128,7 +1154,7 @@ void DrawEnhancementsMenu() {
 
         UIWidgets::Spacer(0);
 
-        if (ImGui::BeginMenu("Extra Modes")) {
+        if (BeginFixedWidthMenu("Extra Modes")) {
         #ifdef ENABLE_CROWD_CONTROL
             if (UIWidgets::PaddedEnhancementCheckbox("Crowd Control", "gCrowdControl", false, false)) {
                 if (CVarGetInteger("gCrowdControl", 0)) {
@@ -1193,7 +1219,7 @@ void DrawEnhancementsMenu() {
 
             if (CVarGetInteger("gAddTraps.enabled", 0)) {
                 UIWidgets::PaddedSeparator();
-                if (ImGui::BeginMenu("Trap Options")) {
+                if (BeginFixedWidthMenu("Trap Options")) {
                     ImGui::Text("Tier 1 Traps:");
                     UIWidgets::Spacer(0);
                     UIWidgets::PaddedEnhancementCheckbox("Freeze Traps", "gAddTraps.Ice", true, false);
@@ -1273,11 +1299,11 @@ void DrawEnhancementsMenu() {
 }
 
 void DrawCheatsMenu() {
-    if (ImGui::BeginMenu("Cheats"))
+    if (BeginFixedWidthMenu("Cheats"))
     {
         ImGui::BeginDisabled(CVarGetInteger("gDisableChangingSettings", 0));
 
-        if (ImGui::BeginMenu("Infinite...")) {
+        if (BeginFixedWidthMenu("Infinite...")) {
             UIWidgets::EnhancementCheckbox("Money", "gInfiniteMoney");
             UIWidgets::PaddedEnhancementCheckbox("Health", "gInfiniteHealth", true, false);
             UIWidgets::PaddedEnhancementCheckbox("Ammo", "gInfiniteAmmo", true, false);
@@ -1333,7 +1359,7 @@ void DrawCheatsMenu() {
         UIWidgets::PaddedEnhancementCheckbox("No ReDead/Gibdo Freeze", "gNoRedeadFreeze", true, false);
         UIWidgets::Tooltip("Prevents ReDeads and Gibdos from being able to freeze you with their scream");
         UIWidgets::Spacer(2.0f);
-        if (ImGui::BeginMenu("Save States")) {
+        if (BeginFixedWidthMenu("Save States")) {
             ImGui::TextColored({ 0.85f, 0.85f, 0.0f, 1.0f }, "          " ICON_FA_EXCLAMATION_TRIANGLE);
             ImGui::SameLine();
             ImGui::TextColored({ 0.85f, 0.35f, 0.0f, 1.0f }, " WARNING!!!! ");
@@ -1445,7 +1471,7 @@ extern std::shared_ptr<ActorViewerWindow> mActorViewerWindow;
 extern std::shared_ptr<DLViewerWindow> mDLViewerWindow;
 
 void DrawDeveloperToolsMenu() {
-    if (ImGui::BeginMenu("Developer Tools")) {
+    if (BeginFixedWidthMenu("Developer Tools")) {
         ImGui::BeginDisabled(CVarGetInteger("gDisableChangingSettings", 0));
 
         UIWidgets::EnhancementCheckbox("OoT Debug Mode", "gDebugEnabled");
@@ -1534,7 +1560,7 @@ extern std::shared_ptr<CheckTracker::CheckTrackerWindow> mCheckTrackerWindow;
 extern std::shared_ptr<CheckTracker::CheckTrackerSettingsWindow> mCheckTrackerSettingsWindow;
 
 void DrawRandomizerMenu() {
-    if (ImGui::BeginMenu("Randomizer")) {
+    if (BeginFixedWidthMenu("Randomizer")) {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 6.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
@@ -1586,7 +1612,7 @@ void DrawRandomizerMenu() {
 
         UIWidgets::PaddedSeparator();
 
-        if (ImGui::BeginMenu("Rando Enhancements"))
+        if (BeginFixedWidthMenu("Rando Enhancements"))
         {
             UIWidgets::EnhancementCheckbox("Rando-Relevant Navi Hints", "gRandoRelevantNavi", false, "", UIWidgets::CheckboxGraphics::Cross, true);
             UIWidgets::Tooltip(
