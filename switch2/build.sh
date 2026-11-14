@@ -23,6 +23,9 @@ cmake -H"$ROOT" -B"$BUILD" -G Ninja \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build "$BUILD" --target soh_nro
 
+# Stop if the NRO is not marked as a Switch 2 program (old SDK or libnx).
+python3 "$ROOT/switch2/check_nro.py" "$BUILD/soh/soh.nro"
+
 # Start from an empty folder, so no file from an earlier build gets in.
 DIST="$BUILD/dist"
 rm -rf "$DIST" "$BUILD/soh-switch2.zip"

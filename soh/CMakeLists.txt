@@ -787,8 +787,16 @@ endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch")
 
+# The homebrew menu sorts by title. On Switch 2 both ports start with
+# "HarbourMasters - " so they are listed next to each other.
+if (NINTENDO_SWITCH2)
+    set(NACP_TITLE "HarbourMasters - Shipwright")
+else()
+    set(NACP_TITLE "Ship of Harkinian")
+endif()
+
 nx_generate_nacp(Ship.nacp
-   NAME "Ship of Harkinian"
+   NAME "${NACP_TITLE}"
    AUTHOR "${PROJECT_TEAM}"
    VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
 )
