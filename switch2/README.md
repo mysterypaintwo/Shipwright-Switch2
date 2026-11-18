@@ -1,4 +1,21 @@
-# Switch 2 (ounce) build
+# Ship of Harkinian for Switch 2 (ounce)
+
+An unofficial build of Ship of Harkinian 8.0.6 for the Nintendo Switch 2. It
+runs as homebrew from the homebrew menu.
+
+## Quick start
+
+1. Unzip `soh-switch2.zip` to the root of the SD card. You get
+   `/switch/soh/soh.nro` and `/switch/soh/soh.otr`.
+2. Make `oot.otr` (or `oot-mq.otr`) from your own ROM with the PC version
+   8.0.6 of Ship of Harkinian, and copy it to `/switch/soh/`.
+   `GAME-DATA.md` (next to this file) explains it step by step.
+3. Start "HarbourMasters - Shipwright" from the homebrew menu.
+
+The rest of this file is for building from source, and has more about
+playing (see "Install on the console" and "Playing").
+
+# Building
 
 This folder builds Ship of Harkinian for Switch 2 with the ounce homebrew SDK
 (libounce and OunceVK). The build uses the existing Switch code with
@@ -12,8 +29,9 @@ This folder builds Ship of Harkinian for Switch 2 with the ounce homebrew SDK
   sudo dkp-pacman -S --needed switch-dev switch-portlibs
   ```
 
-- The ounce devkit 20261114 or newer, unpacked into `$DEVKITPRO` (it adds
-  `libounce` and `portlibs/switch2`). Older SDKs are refused: their NROs are
+- The ounce devkit 20261117 or newer, installed in `$DEVKITPRO` with
+  `sh install.sh` from ounce-devkit (it adds `libounce` and
+  `portlibs/switch2`). Older SDKs are refused: their NROs are
   not marked as Switch 2 programs, and the console warns about them.
 - A supported ROM to make the OTR files (see `docs/supportedHashes.json`).
 
@@ -49,7 +67,8 @@ Each player makes their own from their own ROM (see above).
 ## Install on the console
 
 1. Unzip `soh-switch2.zip` to the root of the SD card.
-2. Copy your own `oot.otr`, `oot-mq.otr`, or both to `/switch/soh/`.
+2. Copy your own `oot.otr`, `oot-mq.otr`, or both to `/switch/soh/`
+   (`GAME-DATA.md` explains how to make them with the PC version 8.0.6).
 3. Start "HarbourMasters - Shipwright" from the homebrew menu.
 
 Which quest you get depends on the files:
@@ -76,6 +95,8 @@ and French text: pick the language in Settings > Languages.
   With vsync on, the game is held to the display's refresh rate (120 Hz
   handheld, 60 Hz on most TVs).
 - Bug reports: the log is in `/switch/soh/logs/`. Send it with the report.
+  After a crash, the folder also has a `crash-<date>.txt` file that says
+  where the game crashed.
 
 ## Changes for Switch 2
 

@@ -37,6 +37,7 @@ else
     echo "warning: soh.otr not found; make it with the GenerateSohOtr target" >&2
 fi
 cp "$ROOT/switch2/README.md" "$DIST/readme.txt"
+cp "$ROOT/switch2/GAME-DATA.md" "$DIST/GAME-DATA.md"
 
 # Stop if a ROM-derived file got into the archive folder.
 if find "$DIST" -name 'oot*.otr' -o -name '*.z64' -o -name '*.n64' -o -name '*.v64' | grep -q .; then
