@@ -21,6 +21,7 @@
 - The yellow dirt path in Hyrule Field no longer cuts off in front of the player.
 - Moving the right stick while aiming no longer leaves first person.
 - Missing game files now show a clear message. Press A to return to the Homebrew Menu.
+- Holding Y no longer opens a window switcher.
 
 **Updating:** your old `oot.otr` no longer works. Make a new `oot.o2r` with `GAME-DATA.md`, delete `soh.otr` and `oot.otr`, and back up `/switch/soh/Save/` first. The first launch takes longer while it prepares shaders.
 
