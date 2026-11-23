@@ -12577,23 +12577,12 @@ void Player_Destroy(Actor* thisx, PlayState* play) {
     gSaveContext.linkAge = play->linkAgeOnLoad;
 }
 
-#include "ship/port/switch/Switch2Debug.h"
-#include <stdio.h>
 
 // SoH [Port] Gyro aiming is opt-in on Switch, where a gyro mapping is always present.
 static f32 Player_AimGyroX(void) {
 #ifdef __SWITCH__
     if (!CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0)) {
         return 0.0f;
-    }
-    if (Switch2Debug_Enabled()) {
-        static u32 sAimLogCounter = 0;
-        if ((sAimLogCounter++ % 60) == 0) {
-            char line[96];
-            snprintf(line, sizeof(line), "A gyro-aim pad x=%.3f y=%.3f", sControlInput->cur.gyro_x,
-                     sControlInput->cur.gyro_y);
-            Switch2Debug_Log(line);
-        }
     }
     return sControlInput->cur.gyro_x * CVarGetFloat(CVAR_ENHANCEMENT("GyroAiming.SensitivityY"), 1.0f) *
            (CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.InvertY"), 0) ? -1.0f : 1.0f);

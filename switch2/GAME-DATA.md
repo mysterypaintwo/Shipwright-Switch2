@@ -24,7 +24,7 @@ data that this build refuses.
 3. Choose your ROM when asked. When the game starts, close it.
 4. Find `oot.o2r` (`oot-mq.o2r` for a Master Quest ROM):
    - Windows: the program's folder.
-   - macOS: `~/Library/Application Support/soh/`
+   - macOS: `~/Library/Application Support/com.shipofharkinian.soh/`
    - Linux: the program's folder or `~/.local/share/soh/`
 
    If it is not there, search your computer for `oot.o2r`.
