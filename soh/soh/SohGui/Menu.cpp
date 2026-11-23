@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <variant>
 #include <tuple>
 
@@ -16,8 +17,18 @@ extern "C" {
 #include "z64.h"
 extern PlayState* gPlayState;
 }
+// Last include: on Switch 2 it scales the sizes pushed with ImGui::PushStyleVar.
+#include "Switch2UiScale.h"
 
 std::vector<ImVec2> windowTypeSizes = { {} };
+
+// Fixed widths in the menu layout (sidebar, header search box). On Switch 2 the
+// fonts are larger and the pushed padding 3x (Switch2UiScale.h), so make them wider.
+#ifdef __SWITCH2__
+static constexpr float kMenuLayoutScale = 2.0f;
+#else
+static constexpr float kMenuLayoutScale = 1.0f;
+#endif
 
 extern std::unordered_map<s16, const char*> warpPointSceneList;
 extern void Warp();
@@ -185,14 +196,14 @@ bool ModernMenuSidebarEntry(std::string label) {
     return pressed;
 }
 
-bool ModernMenuHeaderEntry(std::string label) {
+bool ModernMenuHeaderEntry(std::string label, float paddingX) {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec2 pos = window->DC.CursorPos;
     const ImGuiID headerId = window->GetID(std::string(label + "##Header").c_str());
     ImVec2 labelSize = ImGui::CalcTextSize(label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
-    ImRect bb = { pos, pos + labelSize + style.FramePadding * 2 };
+    ImRect bb = { pos, pos + labelSize + ImVec2(paddingX * 2, style.FramePadding.y * 2) };
     ImGui::ItemSize(bb, style.FramePadding.y);
     ImGui::ItemAdd(bb, headerId);
     bool hovered, held;
@@ -202,7 +213,7 @@ bool ModernMenuHeaderEntry(std::string label) {
                                                        : hovered         ? ImGuiCol_ButtonHovered
                                                                          : ImGuiCol_Button),
                                     3.0f);
-    pos += style.FramePadding;
+    pos += ImVec2(paddingX, style.FramePadding.y);
     UIWidgets::RenderText(pos, label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
     return pressed;
 }
@@ -678,7 +689,7 @@ void Menu::DrawElement() {
     float headerWidth = 0.0f;
     bool headerSearch = !CVarGetInteger(CVAR_SETTING("Menu.SidebarSearch"), 0);
     if (headerSearch) {
-        headerWidth += 200.0f;
+        headerWidth += 200.0f * kMenuLayoutScale;
     }
     for (auto& label : menuOrder) {
         ImVec2 size = ImGui::CalcTextSize(label.c_str());
@@ -706,6 +717,25 @@ void Menu::DrawElement() {
     std::unordered_map<std::string, SidebarEntry>* sidebar = nullptr;
     float headerHeight = headerSizes.at(0).y + style.FramePadding.y * 2;
     ImVec2 buttonSize = ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE) + style.FramePadding * 2;
+    float headerTabPaddingX = style.FramePadding.x;
+    float headerSearchWidth = 200.0f * kMenuLayoutScale;
+#ifdef __SWITCH2__
+    if (headerSearch) {
+        // Narrow the tabs just enough for a search box that shows all of its text and border.
+        const float avail = menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 4 - 8.0f;
+        const float tabCount = static_cast<float>(headerSizes.size());
+        float labelsWidth = 0.0f;
+        for (const auto& size : headerSizes) {
+            labelsWidth += size.x + style.ItemSpacing.x;
+        }
+        const float minSearch = ImGui::CalcTextSize("Search...").x + style.FramePadding.x * 2 + 8.0f;
+        headerTabPaddingX =
+            std::min(style.FramePadding.x, std::max(6.0f, (avail - minSearch - labelsWidth) / (2 * tabCount)));
+        const float tabsWidth = labelsWidth + headerTabPaddingX * 2 * tabCount;
+        headerSearchWidth = std::max(minSearch, std::min(avail - tabsWidth, 200.0f * kMenuLayoutScale));
+        headerWidth = tabsWidth + headerSearchWidth;
+    }
+#endif
     bool scrollbar = false;
     if (headerWidth > menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 3) {
         headerHeight += style.ScrollbarSize;
@@ -731,7 +761,7 @@ void Menu::DrawElement() {
         if (headerIndex != label) {
             ImGui::PushStyleColor(ImGuiCol_Button, { 0, 0, 0, 0 });
         }
-        if (ModernMenuHeaderEntry(entry.label)) {
+        if (ModernMenuHeaderEntry(entry.label, headerTabPaddingX)) {
             if (headerSearch) {
                 menuSearch.Clear();
             }
@@ -764,11 +794,16 @@ void Menu::DrawElement() {
         color.w = 0.6f;
         ImGui::PushStyleColor(ImGuiCol_FrameBg, color);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-        menuSearch.Draw("##search", 200.0f);
+        const float searchBoxX = ImGui::GetCursorPosX();
+        menuSearch.Draw("##search", headerSearchWidth);
         menuSearchText = menuSearch.InputBuf;
         menuSearchText.erase(std::remove(menuSearchText.begin(), menuSearchText.end(), ' '), menuSearchText.end());
         if (menuSearchText.length() < 1) {
-            ImGui::SameLine(headerWidth - 200.0f + style.ItemSpacing.x);
+#ifdef __SWITCH2__
+            ImGui::SameLine(searchBoxX + style.FramePadding.x);
+#else
+            ImGui::SameLine(headerWidth - 200.0f * kMenuLayoutScale + style.ItemSpacing.x);
+#endif
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.4f), "Search...");
         }
         ImGui::PopStyleVar();
@@ -779,10 +814,10 @@ void Menu::DrawElement() {
     UIWidgets::ButtonOptions options3 = {};
     options3.color = UIWidgets::Colors::Red;
     options3.size = UIWidgets::Sizes::Inline;
-    options3.tooltip = "Quit SoH";
+    options3.tooltip = "Quit Game";
     if (UIWidgets::Button(ICON_FA_POWER_OFF, options3)) {
         SohGui::mModalWindow->RegisterPopup(
-            "Quit SoH", "Are you sure you want to quit SoH?", "Quit", "Cancel",
+            "Quit Game", "Are you sure you want to quit?", "Quit Game", "Cancel",
             []() {
                 std::shared_ptr<Menu> menu =
                     static_pointer_cast<Menu>(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetMenu());
@@ -839,10 +874,17 @@ void Menu::DrawElement() {
     ImGui::SetNextWindowPos(pos + style.ItemSpacing * 2);
 
     // Increase sidebar width on larger screens to accommodate people scaling their menus.
-    float sidebarWidth = 200 - style.ItemSpacing.x;
+    float sidebarWidth = 200 * kMenuLayoutScale - style.ItemSpacing.x;
     if (menuSize.x > 1600) {
         sidebarWidth = menuSize.x * 0.15f;
     }
+#ifdef __SWITCH2__
+    // The larger font needs more than 15%: fit the longest tab label.
+    for (const auto& sidebarLabel : menuEntries.at(headerIndex).sidebarOrder) {
+        sidebarWidth = std::max(sidebarWidth, ImGui::CalcTextSize(sidebarLabel.c_str()).x +
+                                                  style.FramePadding.x * 2 + style.ItemSpacing.x * 2);
+    }
+#endif
 
     const char* sidebarCvar = menuEntries.at(headerIndex).sidebarCvar;
 
@@ -889,6 +931,11 @@ void Menu::DrawElement() {
     std::string sectionMenuId = sectionIndex + " Settings";
     size_t columns = sidebar->at(sectionIndex).columnCount;
     size_t columnFuncs = sidebar->at(sectionIndex).columnWidgets.size();
+#ifdef __SWITCH2__
+    // Some pages reserve more columns than they use. Give the empty ones' space
+    // to the columns that have content.
+    columns = std::clamp<size_t>(columns, 1, std::max<size_t>(columnFuncs, 1));
+#endif
     if (windowWidth < 800) {
         columns = 1;
     }
@@ -938,9 +985,15 @@ void Menu::DrawElement() {
                                   ImGuiWindowFlags_NoTitleBar);
             }
             // for (auto& entryName : sidebar->at(sectionIndex).sidebarOrder) {
+#ifdef __SWITCH2__
+            ImGui::PushTextWrapPos(0.0f);
+#endif
             for (auto& entry : sidebar->at(sectionIndex).columnWidgets.at(i)) {
                 MenuDrawItem(entry, menuThemeIndex);
             }
+#ifdef __SWITCH2__
+            ImGui::PopTextWrapPos();
+#endif
             //}
             if (useColumns) {
                 ImGui::EndChild();

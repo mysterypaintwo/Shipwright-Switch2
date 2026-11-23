@@ -12236,6 +12236,17 @@ void Player_Update(Actor* thisx, PlayState* play) {
                 input.cur.button &= ~(BTN_A | BTN_B | BTN_CUP);
                 input.press.button &= ~(BTN_A | BTN_B | BTN_CUP);
             }
+#ifdef __SWITCH__
+            // SoH [Port] The right stick is also mapped to the C buttons. While it aims in
+            // first person, it must not press them, which would leave the view or use an item.
+            if ((this->unk_6AD != 0) && CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0)) {
+                u32 aimButtons = 0;
+                aimButtons |= (input.cur.right_stick_x > 0) ? BTN_CRIGHT : ((input.cur.right_stick_x < 0) ? BTN_CLEFT : 0);
+                aimButtons |= (input.cur.right_stick_y > 0) ? BTN_CUP : ((input.cur.right_stick_y < 0) ? BTN_CDOWN : 0);
+                input.cur.button &= ~aimButtons;
+                input.press.button &= ~aimButtons;
+            }
+#endif
         }
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
@@ -12566,6 +12577,43 @@ void Player_Destroy(Actor* thisx, PlayState* play) {
     gSaveContext.linkAge = play->linkAgeOnLoad;
 }
 
+#include "ship/port/switch/Switch2Debug.h"
+#include <stdio.h>
+
+// SoH [Port] Gyro aiming is opt-in on Switch, where a gyro mapping is always present.
+static f32 Player_AimGyroX(void) {
+#ifdef __SWITCH__
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0)) {
+        return 0.0f;
+    }
+    if (Switch2Debug_Enabled()) {
+        static u32 sAimLogCounter = 0;
+        if ((sAimLogCounter++ % 60) == 0) {
+            char line[96];
+            snprintf(line, sizeof(line), "A gyro-aim pad x=%.3f y=%.3f", sControlInput->cur.gyro_x,
+                     sControlInput->cur.gyro_y);
+            Switch2Debug_Log(line);
+        }
+    }
+    return sControlInput->cur.gyro_x * CVarGetFloat(CVAR_ENHANCEMENT("GyroAiming.SensitivityY"), 1.0f) *
+           (CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.InvertY"), 0) ? -1.0f : 1.0f);
+#else
+    return sControlInput->cur.gyro_x;
+#endif
+}
+
+static f32 Player_AimGyroY(void) {
+#ifdef __SWITCH__
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0)) {
+        return 0.0f;
+    }
+    return sControlInput->cur.gyro_y * CVarGetFloat(CVAR_ENHANCEMENT("GyroAiming.SensitivityX"), 1.0f) *
+           (CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.InvertX"), 0) ? -1.0f : 1.0f);
+#else
+    return sControlInput->cur.gyro_y;
+#endif
+}
+
 // first person manipulate player actor
 s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
     s32 temp1 = 0;
@@ -12591,8 +12639,23 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
         if (CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0)) {
             temp2 += sControlInput->rel.right_stick_y * 240.0f * invertYAxisMulti * yAxisMulti;
         }
-        if (fabsf(sControlInput->cur.gyro_x) > 0.01f) {
-            temp2 += (-sControlInput->cur.gyro_x) * 750.0f;
+#ifdef __SWITCH__
+        // SoH [Port] The view normally eases back to the stick's position, which cancels
+        // gyro and right stick aiming. With either on, the view stays where it is aimed.
+        const s32 gyroAiming = CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0) ||
+                               CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0);
+        if (gyroAiming || CVarGetInteger(CVAR_SETTING("DisableFirstPersonAutoCenterView"), 0)) {
+            this->actor.focus.rot.x += temp2 * 0.1f;
+            if (fabsf(Player_AimGyroX()) > 0.01f) {
+                this->actor.focus.rot.x += (s16)((-Player_AimGyroX()) * 750.0f);
+            }
+            this->actor.focus.rot.x = CLAMP(this->actor.focus.rot.x, -14000, 14000);
+        } else {
+            Math_SmoothStepToS(&this->actor.focus.rot.x, temp2, 14, 4000, 30);
+        }
+#else
+        if (fabsf(Player_AimGyroX()) > 0.01f) {
+            temp2 += (-Player_AimGyroX()) * 750.0f;
         }
         if (CVarGetInteger(CVAR_SETTING("DisableFirstPersonAutoCenterView"), 0)) {
             this->actor.focus.rot.x += temp2 * 0.1f;
@@ -12600,6 +12663,7 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
         } else {
             Math_SmoothStepToS(&this->actor.focus.rot.x, temp2, 14, 4000, 30);
         }
+#endif
 
         // X Axis
         temp2 = 0;
@@ -12609,8 +12673,8 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
         if (CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0)) {
             temp2 += sControlInput->rel.right_stick_x * -16.0f * invertXAxisMulti * xAxisMulti;
         }
-        if (fabsf(sControlInput->cur.gyro_y) > 0.01f) {
-            temp2 += (sControlInput->cur.gyro_y) * 750.0f * invertXAxisMulti;
+        if (fabsf(Player_AimGyroY()) > 0.01f) {
+            temp2 += (Player_AimGyroY()) * 750.0f * invertXAxisMulti;
         }
         temp2 = CLAMP(temp2, -3000, 3000);
         this->actor.focus.rot.y += temp2;
@@ -12628,8 +12692,8 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
                      (s32)((1.0f - Math_CosS(sControlInput->rel.right_stick_y * 200)) * 1500.0f) * invertYAxisMulti *
                      yAxisMulti;
         }
-        if (fabsf(sControlInput->cur.gyro_x) > 0.01f) {
-            temp3 += (-sControlInput->cur.gyro_x) * 750.0f;
+        if (fabsf(Player_AimGyroX()) > 0.01f) {
+            temp3 += (-Player_AimGyroX()) * 750.0f;
         }
         this->actor.focus.rot.x += temp3;
         this->actor.focus.rot.x = CLAMP(this->actor.focus.rot.x, -temp1, temp1);
@@ -12648,8 +12712,8 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
                      (s32)((1.0f - Math_CosS(sControlInput->rel.right_stick_x * 200)) * -1500.0f) * invertXAxisMulti *
                      xAxisMulti;
         }
-        if (fabsf(sControlInput->cur.gyro_y) > 0.01f) {
-            temp3 += (sControlInput->cur.gyro_y) * 750.0f * invertXAxisMulti;
+        if (fabsf(Player_AimGyroY()) > 0.01f) {
+            temp3 += (Player_AimGyroY()) * 750.0f * invertXAxisMulti;
         }
         temp2 += temp3;
         this->actor.focus.rot.y = CLAMP(temp2, -temp1, temp1) + this->actor.shape.rot.y;

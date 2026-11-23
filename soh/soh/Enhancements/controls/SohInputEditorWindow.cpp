@@ -18,7 +18,41 @@ extern "C" {
 #include <ship/controller/controldevice/controller/mapping/sdl/SDLAxisDirectionToButtonMapping.h>
 #endif
 
+// Last include: on Switch 2 it scales the sizes pushed with ImGui::PushStyleVar.
+#include "soh/SohGui/Switch2UiScale.h"
+
 #define SCALE_IMGUI_SIZE(value) ((value / 13.0f) * ImGui::GetFontSize())
+
+#ifdef __SWITCH__
+// The stick also moves the menu. While listening for an input, wait for it to
+// return to center first, and keep menu navigation off until it is released.
+static bool sInputPopupWasOpen = false;
+static bool sWaitForStickCenter = false;
+static bool sHoldNavUntilCentered = false;
+
+static bool AnyGamepadStickHeld() {
+    auto devices = Ship::Context::GetRawInstance()->GetControlDeck()->GetConnectedPhysicalDeviceManager();
+    for (uint8_t port = 0; port < 4; port++) {
+        for (const auto& [instanceId, gamepad] : devices->GetConnectedSDLGamepadsForPort(port)) {
+            for (int axis = SDL_CONTROLLER_AXIS_LEFTX; axis <= SDL_CONTROLLER_AXIS_RIGHTY; axis++) {
+                if (std::abs(SDL_GameControllerGetAxis(gamepad, static_cast<SDL_GameControllerAxis>(axis))) > 9000) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+#endif
+
+// Button size that keeps the label centered at the console's larger padding.
+static ImVec2 PortActionButtonSize(const char* label) {
+#ifdef __SWITCH2__
+    return ImVec2(ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2, 0.0f);
+#else
+    return ImGui::CalcTextSize(label) * 2;
+#endif
+}
 
 using namespace UIWidgets;
 
@@ -98,8 +132,27 @@ void SohInputEditorWindow::UpdateElement() {
             }
         }
 
+#ifdef __SWITCH__
+        if (!sInputPopupWasOpen) {
+            sInputPopupWasOpen = true;
+            sWaitForStickCenter = true;
+        }
+        if (sWaitForStickCenter) {
+            if (AnyGamepadStickHeld()) {
+                mMappingInputBlockTimer = 2;
+            } else {
+                sWaitForStickCenter = false;
+            }
+        }
+#endif
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->BlockGamepadNavigation();
     } else {
+#ifdef __SWITCH__
+        if (sInputPopupWasOpen) {
+            sInputPopupWasOpen = false;
+            sHoldNavUntilCentered = true;
+        }
+#endif
         if (mGameInputBlockTimer != INT32_MAX) {
             mGameInputBlockTimer--;
             if (mGameInputBlockTimer <= 0) {
@@ -115,6 +168,13 @@ void SohInputEditorWindow::UpdateElement() {
             mMappingInputBlockTimer = INT32_MAX;
         }
 
+#ifdef __SWITCH__
+        if (sHoldNavUntilCentered && AnyGamepadStickHeld()) {
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->BlockGamepadNavigation();
+            return;
+        }
+        sHoldNavUntilCentered = false;
+#endif
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->UnblockGamepadNavigation();
     }
 }
@@ -1612,7 +1672,11 @@ void SohInputEditorWindow::DrawLinkTab() {
             DrawRumbleSection(portIndex);
         }
 
+#ifdef __SWITCH__
+        if (ImGui::CollapsingHeader("Gyro", NULL, ImGuiTreeNodeFlags_DefaultOpen)) {
+#else
         if (ImGui::CollapsingHeader("Gyro")) {
+#endif
             DrawGyroSection(portIndex);
         }
 
@@ -1624,6 +1688,15 @@ void SohInputEditorWindow::DrawLinkTab() {
             DrawButtonLine("M1", portIndex, BTN_CUSTOM_MODIFIER1);
             DrawButtonLine("M2", portIndex, BTN_CUSTOM_MODIFIER2);
         }
+
+#ifdef __SWITCH__
+        if (ImGui::CollapsingHeader("Save States")) {
+            ImGui::TextWrapped("Tap + to add a button. Add more than one to make a combo: "
+                               "all of them must be held together. Turn save states on in the Cheats menu.");
+            DrawButtonLine("Save", portIndex, BTN_CUSTOM_SAVE_STATE);
+            DrawButtonLine("Load", portIndex, BTN_CUSTOM_LOAD_STATE);
+        }
+#endif
 
         if (ImGui::CollapsingHeader("Ocarina Controls")) {
             DrawOcarinaControlPanel();
@@ -1754,17 +1827,20 @@ void SohInputEditorWindow::DrawDebugPortTab(uint8_t portIndex, std::string custo
 
 void SohInputEditorWindow::DrawClearAllButton(uint8_t portIndex) {
     PushStyleButton(THEME_COLOR);
-    if (ImGui::Button("Clear All", ImGui::CalcTextSize("Clear All") * 2)) {
-        ImGui::OpenPopup("Clear All##clearAllPopup");
+    const auto clearPopupId = StringHelper::Sprintf("Clear All##clearAllPopup%d", portIndex);
+    if (ImGui::Button(StringHelper::Sprintf("Clear All##clearAllButton%d", portIndex).c_str(),
+                      PortActionButtonSize("Clear All"))) {
+        ImGui::OpenPopup(clearPopupId.c_str());
     }
     PopStyleButton();
-    if (ImGui::BeginPopupModal("Clear All##clearAllPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(clearPopupId.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("This will clear all mappings for port %d.\n\nContinue?", portIndex + 1);
         PushStyleButton(THEME_COLOR);
-        if (ImGui::Button("Cancel")) {
+        if (ImGui::Button("Cancel##clearAllCancel")) {
             ImGui::CloseCurrentPopup();
         }
-        if (ImGui::Button("Clear All")) {
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All##clearAllConfirm")) {
             Ship::Context::GetRawInstance()->GetControlDeck()->GetControllerByPort(portIndex)->ClearAllMappings();
             ImGui::CloseCurrentPopup();
         }
@@ -1778,7 +1854,7 @@ void SohInputEditorWindow::DrawSetDefaultsButton(uint8_t portIndex) {
     auto popupId = StringHelper::Sprintf("setDefaultsPopup##%d", portIndex);
     PushStyleButton(THEME_COLOR);
     if (ImGui::Button(StringHelper::Sprintf("Set Defaults##%d", portIndex).c_str(),
-                      ImVec2(ImGui::CalcTextSize("Set Defaults") * 2))) {
+                      PortActionButtonSize("Set Defaults"))) {
         ImGui::OpenPopup(popupId.c_str());
     }
     PopStyleButton();
@@ -1787,17 +1863,18 @@ void SohInputEditorWindow::DrawSetDefaultsButton(uint8_t portIndex) {
         bool shouldClose = false;
         PushStyleButton(BUTTON_COLOR_KEYBOARD_BEIGE);
         if (ImGui::Button(StringHelper::Sprintf("%s Keyboard", ICON_FA_KEYBOARD_O).c_str())) {
-            ImGui::OpenPopup("Set Defaults for Keyboard");
+            ImGui::OpenPopup(StringHelper::Sprintf("Set Defaults for Keyboard##%d", portIndex).c_str());
         }
         PopStyleButton();
-        if (ImGui::BeginPopupModal("Set Defaults for Keyboard", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal(StringHelper::Sprintf("Set Defaults for Keyboard##%d", portIndex).c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("This will clear all existing mappings for\nKeyboard on port %d.\n\nContinue?", portIndex + 1);
             PushStyleButton(THEME_COLOR);
-            if (ImGui::Button("Cancel")) {
+            if (ImGui::Button("Cancel##defaultsKeyboardCancel")) {
                 shouldClose = true;
                 ImGui::CloseCurrentPopup();
             }
-            if (ImGui::Button("Set defaults")) {
+            ImGui::SameLine();
+            if (ImGui::Button("Set defaults##keyboardConfirm")) {
                 Ship::Context::GetRawInstance()
                     ->GetControlDeck()
                     ->GetControllerByPort(portIndex)
@@ -1816,18 +1893,19 @@ void SohInputEditorWindow::DrawSetDefaultsButton(uint8_t portIndex) {
         GetButtonColorsForDeviceType(Ship::PhysicalDeviceType::SDLGamepad, buttonColor, buttonHoveredColor);
         PushStyleButton(buttonColor);
         if (ImGui::Button(StringHelper::Sprintf("%s %s", ICON_FA_GAMEPAD, "Gamepad (SDL)").c_str())) {
-            ImGui::OpenPopup("Set Defaults for Gamepad (SDL)");
+            ImGui::OpenPopup(StringHelper::Sprintf("Set Defaults for Gamepad (SDL)##%d", portIndex).c_str());
         }
         PopStyleButton();
-        if (ImGui::BeginPopupModal("Set Defaults for Gamepad (SDL)", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal(StringHelper::Sprintf("Set Defaults for Gamepad (SDL)##%d", portIndex).c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("This will clear all existing mappings for\nGamepad (SDL) on port %d.\n\nContinue?",
                         portIndex + 1);
             PushStyleButton(THEME_COLOR);
-            if (ImGui::Button("Cancel")) {
+            if (ImGui::Button("Cancel##defaultsGamepadCancel")) {
                 shouldClose = true;
                 ImGui::CloseCurrentPopup();
             }
-            if (ImGui::Button("Set defaults")) {
+            ImGui::SameLine();
+            if (ImGui::Button("Set defaults##gamepadConfirm")) {
                 Ship::Context::GetRawInstance()
                     ->GetControlDeck()
                     ->GetControllerByPort(portIndex)
@@ -1841,11 +1919,19 @@ void SohInputEditorWindow::DrawSetDefaultsButton(uint8_t portIndex) {
             ImGui::EndPopup();
         }
 
-        PushStyleButton(THEME_COLOR);
-        if (ImGui::Button("Cancel") || shouldClose) {
+        // A confirmation dialog has its own Cancel, so hide this one behind it.
+        const bool confirmOpen =
+            ImGui::IsPopupOpen(StringHelper::Sprintf("Set Defaults for Keyboard##%d", portIndex).c_str()) ||
+            ImGui::IsPopupOpen(StringHelper::Sprintf("Set Defaults for Gamepad (SDL)##%d", portIndex).c_str());
+        if (shouldClose) {
             ImGui::CloseCurrentPopup();
+        } else if (!confirmOpen) {
+            PushStyleButton(THEME_COLOR);
+            if (ImGui::Button("Cancel##defaultsMenuCancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+            PopStyleButton();
         }
-        PopStyleButton();
 
         ImGui::EndPopup();
     }

@@ -1,5 +1,16 @@
 #include "global.h"
 
+// SoH [Port] OSMesg is 8 bytes on 64-bit platforms, so receiving straight into
+// a 4-byte variable writes past it. Receive into a whole OSMesg instead.
+static inline s32 RecvMesgU32(OSMesgQueue* mq, u32* out, s32 flag) {
+    OSMesg mesg;
+    s32 result = osRecvMesg(mq, &mesg, flag);
+    if (result == 0) {
+        *out = mesg.data32;
+    }
+    return result;
+}
+
 #define SAMPLES_TO_OVERPRODUCE 0x10
 #define EXTRA_BUFFERED_AI_SAMPLES_TARGET 0x80
 
@@ -512,7 +523,7 @@ void Audio_ProcessCmds(u32 msg) {
 u32 func_800E5E20(u32* out) {
     u32 sp1C;
 
-    if (osRecvMesg(&gAudioContext.externalLoadQueue, (OSMesg*)&sp1C, OS_MESG_NOBLOCK) == -1) {
+    if (RecvMesgU32(&gAudioContext.externalLoadQueue, &sp1C, OS_MESG_NOBLOCK) == -1) {
         *out = 0;
         return 0;
     }

@@ -9,7 +9,12 @@ extern "C" {
 extern PlayState* gPlayState;
 }
 
+#ifdef __SWITCH2__
+// At 1080p the default depth offset cuts the paths off near the camera.
+static constexpr ZFightingFixType CVAR_DIRT_PATH_DEFAULT = ZFIGHT_FIX_NO_VANISH;
+#else
 static constexpr ZFightingFixType CVAR_DIRT_PATH_DEFAULT = ZFIGHT_FIX_DISABLED;
+#endif
 #define CVAR_DIRT_PATH_NAME CVAR_ENHANCEMENT("SceneSpecificDirtPathFix")
 #define CVAR_DIRT_PATH_VALUE CVarGetInteger(CVAR_DIRT_PATH_NAME, CVAR_DIRT_PATH_DEFAULT)
 

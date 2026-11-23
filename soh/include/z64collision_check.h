@@ -1,6 +1,9 @@
 #ifndef Z_COLLISION_CHECK_H
 #define Z_COLLISION_CHECK_H
 
+// newlib <sys/types.h> defines quad as a macro, which would rename the members below.
+#undef quad
+
 #define COLLISION_CHECK_AT_MAX 50
 #define COLLISION_CHECK_AC_MAX 60
 #define COLLISION_CHECK_OC_MAX 50

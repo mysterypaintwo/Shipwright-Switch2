@@ -11,6 +11,19 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <stdio.h>
+
+#include "ship/port/switch/SwitchLoading.h"
+
+// SoH [Port] OSMesg is 8 bytes on 64-bit platforms, so receiving straight into
+// a 4-byte variable writes past it. Receive into a whole OSMesg instead.
+static inline s32 RecvMesgU32(OSMesgQueue* mq, u32* out, s32 flag) {
+    OSMesg mesg;
+    s32 result = osRecvMesg(mq, &mesg, flag);
+    if (result == 0) {
+        *out = mesg.data32;
+    }
+    return result;
+}
 #ifdef _MSC_VER
 #define strdup _strdup
 #endif
@@ -1349,6 +1362,7 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
     gAudioContext.seqLoadStatus = malloc(sequenceMapSize + 0xF);
     memset(gAudioContext.seqLoadStatus, 5, sequenceMapSize + 0xF);
     for (size_t i = 0; i < seqListSize; i++) {
+        SwitchLoading_Update((int)i + 1, seqListSize + 1);
         SequenceData sDat = ResourceMgr_LoadSeqByName(seqList[i]);
         sequenceMap[sDat.seqNumber] = strdup(seqList[i]);
         seqCachePolicyMap[sDat.seqNumber] = sDat.cachePolicy;
@@ -1370,6 +1384,7 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
     fontMap = calloc(customFntListSize + fntListSize, sizeof(char*));
     fontMapSize = customFntListSize + fntListSize;
     for (int i = 0; i < fntListSize; i++) {
+        SwitchLoading_Update(i + 1, fntListSize);
         SoundFont* sf = ResourceMgr_LoadAudioSoundFontByName(fntList[i]);
         fontMap[sf->fntIndex] = strdup(fntList[i]);
     }
@@ -2000,11 +2015,11 @@ s32 AudioLoad_ProcessSamplePreloads(s32 resetStatus) {
     if (gAudioContext.preloadSampleStackTop > 0) {
         if (resetStatus != 0) {
             // Clear result queue and preload stack and return.
-            osRecvMesg(&gAudioContext.preloadSampleQueue, (OSMesg*)&preloadIndex, OS_MESG_NOBLOCK);
+            RecvMesgU32(&gAudioContext.preloadSampleQueue, &preloadIndex, OS_MESG_NOBLOCK);
             gAudioContext.preloadSampleStackTop = 0;
             return 0;
         }
-        if (osRecvMesg(&gAudioContext.preloadSampleQueue, (OSMesg*)&preloadIndex, OS_MESG_NOBLOCK) == -1) {
+        if (RecvMesgU32(&gAudioContext.preloadSampleQueue, &preloadIndex, OS_MESG_NOBLOCK) == -1) {
             // Previous preload is not done yet.
             return 0;
         }
@@ -2308,7 +2323,7 @@ void AudioLoad_ProcessScriptLoads(void) {
     u32 sp20;
     s8* isDone;
 
-    if (osRecvMesg(&sScriptLoadQueue, (OSMesg*)&sp20, OS_MESG_NOBLOCK) != -1) {
+    if (RecvMesgU32(&sScriptLoadQueue, &sp20, OS_MESG_NOBLOCK) != -1) {
         temp = sp20 >> 24;
         isDone = sScriptLoadDonePointers[temp];
         if (isDone != NULL) {

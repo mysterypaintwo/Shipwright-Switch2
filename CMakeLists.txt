@@ -129,10 +129,13 @@ endif()
 # Global configuration types
 ################################################################################
 if (CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
-set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -DDEBUG")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+# The decompiled N64 code type-puns, relies on wrapping, and has uninitialized
+# locals. GCC optimizes all of those into wrong behavior.
+set(SWITCH_SAFE_FLAGS "-fno-strict-aliasing -fwrapv -ftrivial-auto-var-init=zero")
+set(CMAKE_C_FLAGS_DEBUG "-g ${SWITCH_SAFE_FLAGS} -DDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-g ${SWITCH_SAFE_FLAGS} -DDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-O3 ${SWITCH_SAFE_FLAGS} -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 ${SWITCH_SAFE_FLAGS} -DNDEBUG")
 else()
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
@@ -221,6 +224,10 @@ if(_use_system_spdlog)
     find_package(spdlog 1.10 QUIET)
 endif()
 if(NOT spdlog_FOUND)
+    if(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
+        # newlib has no fwrite_unlocked
+        set(SPDLOG_FWRITE_UNLOCKED OFF CACHE BOOL "" FORCE)
+    endif()
     FetchContent_Declare(
         spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
@@ -280,6 +287,8 @@ function(quiet_dependency_tree dir)
     endforeach()
 endfunction()
 
+# The console build does not run Torch: game data is prepared on a PC.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
 add_subdirectory(torch SYSTEM)
 quiet_dependency_tree(${CMAKE_CURRENT_SOURCE_DIR}/torch)
 
@@ -358,6 +367,8 @@ add_custom_target(GenerateSohOtr ALL DEPENDS ${CMAKE_BINARY_DIR}/soh/soh.o2r)
 
 # ExtractAssets produced soh.o2r as well as the rom archives, so keep doing that.
 add_dependencies(ExtractAssets GenerateSohOtr)
+
+endif() # not NintendoSwitch
 
 # The asset tools only need torch, so a tools-only configure can skip libultraship and soh
 # entirely -- that is all CI needs to produce soh.o2r.

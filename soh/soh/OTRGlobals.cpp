@@ -58,9 +58,25 @@
 
 #if not defined(__SWITCH__) && not defined(__WIIU__)
 #include "Extractor/Extract.h"
+#elif defined(__SWITCH__)
+// The console cannot extract ROMs (game data is prepared on a PC). This keeps
+// the shared startup flow compiling; none of these calls can produce an archive.
+enum class RomSearchMode { Both = 0, Vanilla = 1, MQ = 2 };
+class Extractor {
+  public:
+    bool RunFileStandalone(const std::string&) { return false; }
+    bool IsMasterQuest() const { return false; }
+    bool CallTorch(std::string, std::string, std::atomic<size_t>*, std::atomic<size_t>*) { return false; }
+    void SetSearchPath(const std::string&) {}
+    void GetRoms(std::vector<std::string>&) {}
+    bool ManuallySearchForRomMatchingType(RomSearchMode) { return false; }
+    static void ShowErrorBox(const char* title, const char* text) { SPDLOG_ERROR("{}: {}", title, text); }
+};
 #endif
 
 #include <fast/interpreter.h>
+#include "ship/port/switch/Switch2Debug.h"
+#include "ship/port/switch/SwitchLoading.h"
 
 #ifdef __APPLE__
 #include <SDL_scancode.h>
@@ -69,7 +85,12 @@
 #endif
 
 #ifdef __SWITCH__
-#include <port/switch/SwitchImpl.h>
+#include <ship/port/switch/SwitchImpl.h>
+#include <ship/port/switch/SwitchShaderCache.h>
+#include "SwitchShaderSeed.h"
+#include <dirent.h>
+#include <set>
+#include <sys/stat.h>
 #elif defined(__WIIU__)
 #include <port/wiiu/WiiUImpl.h>
 #include <coreinit/debug.h> // OSFatal
@@ -298,6 +319,10 @@ OTRGlobals::OTRGlobals() {
         BTN_CUSTOM_OCARINA_DISABLE_SONGS,
         BTN_CUSTOM_OCARINA_PITCH_UP,
         BTN_CUSTOM_OCARINA_PITCH_DOWN,
+#ifdef __SWITCH__
+        BTN_CUSTOM_SAVE_STATE,
+        BTN_CUSTOM_LOAD_STATE,
+#endif
     }));
     context->InitControlDeck(controlDeck);
     context->InitResourceManager({ portArchivePath }, {}, 3, true);
@@ -408,6 +433,11 @@ static bool RemoveArchiveAcrossAppDirs(const std::string& fileName) {
     return !std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs(fileName, appShortName));
 }
 
+#ifdef __SWITCH__
+// Set by the Quit button of the loader popups.
+static bool sQuitFromLoader = false;
+#endif
+
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
@@ -442,11 +472,15 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::string file;
 
 #if defined(__SWITCH__)
-    SohGui::RegisterPopup("Outdated ROM Archives",
-                          "\x1b[2;2HYou've launched the Ship with an old ROM O2R file."
-                          "\x1b[4;2HPlease regenerate a new ROM O2R and relaunch."
-                          "\x1b[6;2HPress the Home button to exit...",
-                          "OK", "", [&]() { exit(1); });
+    // Consoles cannot extract. Stop only if a ROM archive is outdated.
+    if (shouldRegen) {
+        SohGui::RegisterPopup("Outdated ROM Archive",
+                              "Your oot.o2r or oot-mq.o2r was made by a different major\n"
+                              "version of Ship of Harkinian. Make a new one with the PC\n"
+                              "version that matches this build (" + std::to_string(gBuildVersionMajor) +
+                                  ".x), copy it to\n/switch/soh/, and start the game again.",
+                              "Quit", "", [&]() { sQuitFromLoader = true; });
+    }
 #elif defined(__WIIU__)
     SohGui::RegisterPopup("Outdated ROM Archives",
                           "You've launched the Ship with an old a ROM O2R file.\n\n"
@@ -456,6 +490,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     OSFatal();
 #endif
 
+#ifndef __SWITCH__
     if (!std::filesystem::exists(installPath + "/assets")) {
         SohGui::RegisterPopup("Extractor assets not found",
                               "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
@@ -475,6 +510,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                 "OK", "", [&]() { exit(1); });
         }
     }
+#endif
 
     std::shared_ptr<BS::thread_pool> threadPool = std::make_shared<BS::thread_pool>(1);
     std::optional<std::future<void>> extractionTask;
@@ -501,8 +537,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     std::string msg;
 
 #if defined(__SWITCH__)
-                    msg = "\x1b[4;2HPlease re-extract it from the download.\n"
-                          "\x1b[6;2HPress the Home button to exit...";
+                    msg = "Please copy soh.o2r from the download to /switch/soh/.";
 #elif defined(__WIIU__)
                     msg = "Please extract the soh.o2r from the Ship of Harkinian download\nto your folder.\n\nPress "
                           "and hold the power\n"
@@ -513,7 +548,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #endif
                     std::string title =
                         !std::filesystem::exists(portArchivePath) ? "Missing soh.o2r" : "soh.o2r is outdated";
+#ifdef __SWITCH__
+                    SohGui::RegisterPopup(title, msg, "Quit", "", [&]() { sQuitFromLoader = true; });
+#else
                     SohGui::RegisterPopup(title, msg, "OK", "", [&]() { exit(1); });
+#endif
                 }
                 continue;
             }
@@ -739,9 +778,18 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName));
 
                 if (!ootO2RExists) {
+#ifdef __SWITCH__
+                    SohGui::RegisterPopup("No ROM Archives",
+                                          "No oot.o2r or oot-mq.o2r found in /switch/soh/.\n"
+                                          "See GAME-DATA.md in the download to make one on a PC.",
+                                          "Quit", "", [&]() { sQuitFromLoader = true; });
+                    extractStep = ES_VERIFY;
+                    continue;
+#else
                     SohGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
                                           "", [&]() { exit(0); });
+#endif
                 }
                 extractDone = true;
                 continue;
@@ -751,9 +799,21 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         }
 
     render:
+#ifdef __SWITCH__
+        if (sQuitFromLoader || !WindowIsRunning()) {
+            // Close the window and GL before exiting, so the app returns to the
+            // homebrew menu. exit() from inside the popup left GL open.
+            SohGui::Destroy();
+            sohFast3dWindow = nullptr;
+            OTRGlobals::Instance->context = nullptr;
+            Ship::Context::DestroyInstance();
+            exit(0);
+        }
+#else
         if (!WindowIsRunning()) {
             exit(0);
         }
+#endif
         // Process window events for resize, mouse, keyboard events
         wnd->HandleEvents();
         UIWidgets::Colors themeColor =
@@ -878,7 +938,11 @@ void OTRGlobals::Initialize() {
                                               CVarGetInteger(CVAR_SETTING("AutoCaptureMouse"), 1));
     context->GetWindow()->SetForceCursorVisibility(CVarGetInteger(CVAR_SETTING("CursorVisibility"), 0));
 
+#ifdef __SWITCH__
+    context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = 4800 });
+#else
     context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = 1680 });
+#endif
 
     // The menu is set up before audio is initialized, so its list of available audio backends has to be
     // populated here rather than in Menu::InitElement (where the window backends are handled).
@@ -1088,18 +1152,32 @@ void OTRAudio_Thread() {
 #define AUDIO_FRAMES_PER_UPDATE (R_UPDATE_RATE > 0 ? R_UPDATE_RATE : 1)
 #define NUM_AUDIO_CHANNELS 2
 
+        SWITCH2_PROF(SW2P_AUDIO);
         int samples_left = AudioPlayer_Buffered();
         u32 num_audio_samples = samples_left < AudioPlayer_GetDesiredBuffered() ? SAMPLES_HIGH : SAMPLES_LOW;
 
+#ifdef __SWITCH__
+        // Audio is made once per drawn frame, so a late frame leaves too little
+        // of it: the music slows down and the queue runs dry. Make extra updates
+        // until the queue is back at its target, except while the audio heap resets.
+        constexpr int kMaxAudioUpdates = 9;
+        int audioUpdates = AUDIO_FRAMES_PER_UPDATE;
+        while (gAudioContext.resetStatus == 0 && audioUpdates < kMaxAudioUpdates &&
+               samples_left + audioUpdates * (int)num_audio_samples < AudioPlayer_GetDesiredBuffered()) {
+            audioUpdates++;
+        }
+        s16 audio_buffer[SAMPLES_HIGH * NUM_AUDIO_CHANNELS * kMaxAudioUpdates];
+#else
+        int audioUpdates = AUDIO_FRAMES_PER_UPDATE;
         // 3 is the maximum authentic frame divisor.
         s16 audio_buffer[SAMPLES_HIGH * NUM_AUDIO_CHANNELS * 3];
-        for (int i = 0; i < AUDIO_FRAMES_PER_UPDATE; i++) {
+#endif
+        for (int i = 0; i < audioUpdates; i++) {
             AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS),
                                            num_audio_samples);
         }
 
-        AudioPlayer_Play((u8*)audio_buffer,
-                         num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * AUDIO_FRAMES_PER_UPDATE));
+        AudioPlayer_Play((u8*)audio_buffer, num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * audioUpdates));
 
         audio.processing = false;
         audio.cv_from_thread.notify_one();
@@ -1110,6 +1188,8 @@ void OTRAudio_Init() {
     // Precache all our samples, sequences, etc...
     ResourceMgr_LoadDirectory("audio");
 
+    Switch2Debug_Start();
+    Switch2Debug_Phase(1, "init:audio-thread");
     if (!audio.running) {
         audio.running = true;
         audio.thread = std::thread(OTRAudio_Thread);
@@ -1551,10 +1631,20 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 #ifdef __linux__
     SetAppImageHome();
 #endif
+#ifdef __SWITCH__
+    Ship::Switch::RequireGameFiles("Ship of Harkinian", "/switch/soh/", { "soh.o2r" }, { "oot.o2r", "oot-mq.o2r" },
+                                   "See GAME-DATA.md in the download to prepare them.");
+#endif
+    Switch2Debug_BootMark("start");
     OTRGlobals::Instance = new OTRGlobals();
+    Switch2Debug_BootMark("context");
+    SwitchLoading_Stage("Loading game data", 0.0f, 0.20f);
     OTRGlobals::Instance->RunExtract(argc, argv);
+    Switch2Debug_BootMark("archive-check");
 
     OTRGlobals::Instance->Initialize();
+    Switch2Debug_BootMark("initialize");
+    SwitchLoading_Update(1, 2);
     CustomMessageManager::Instance = new CustomMessageManager();
     ItemTableManager::Instance = new ItemTableManager();
     GameInteractor::Instance = new GameInteractor();
@@ -1584,9 +1674,14 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     Sail::Instance = new Sail();
     Anchor::Instance = new Anchor();
 
+    Switch2Debug_BootMark("gui-setup");
+    SwitchLoading_Update(2, 2);
     OTRMessage_Init();
+    Switch2Debug_BootMark("messages");
     OTRAudio_Init();
+    Switch2Debug_BootMark("audio-precache");
     OTRExtScanner();
+    Switch2Debug_BootMark("ext-scanner");
     VanillaItemTable_Init();
     DebugConsole_Init();
 
@@ -1629,6 +1724,58 @@ extern "C" void SaveManager_ThreadPoolWait() {
     SaveManager::Instance->ThreadPoolWait();
 }
 
+// Builds known shaders behind the loading screen, then hands over to the game.
+extern "C" void OTRPrepareShaders() {
+#ifdef __SWITCH__
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
+    auto interpreter = wnd != nullptr ? wnd->GetInterpreterWeak().lock() : nullptr;
+    if (interpreter != nullptr) {
+        SwitchShaderCache_Open();
+        std::vector<std::pair<uint64_t, uint64_t>> shaders;
+        std::set<std::pair<uint64_t, uint64_t>> seen;
+        for (const auto& entry : kSwitchShaderSeed) {
+            if (seen.insert({ entry[0], entry[1] }).second) {
+                shaders.push_back({ entry[0], entry[1] });
+            }
+        }
+        for (const auto& entry : SwitchShaderCache_KnownShaders()) {
+            if (seen.insert(entry).second) {
+                shaders.push_back(entry);
+            }
+        }
+        SwitchLoading_Stage("Preparing shaders", 0.60f, 0.72f);
+        interpreter->PrepareShaders(shaders, SwitchLoading_Update);
+        SwitchShaderCache_ReleaseBinaries();
+        Switch2Debug_BootMark("shaders");
+        SwitchLoading_Stage("Preparing graphics", 0.72f, 1.0f);
+        const unsigned long warmStart = Switch2Debug_Micros();
+        interpreter->WarmShaders(shaders, SwitchLoading_Update);
+        Switch2Debug_BootMark("graphics");
+        if (Switch2Debug_Enabled()) {
+            // How much the driver has saved on the SD card, to compare between runs.
+            unsigned long long driverBytes = 0;
+            int driverFiles = 0;
+            const std::string driverDir = "sdmc:/config/ouncevk/shader-cache";
+            if (DIR* dir = opendir(driverDir.c_str())) {
+                while (dirent* entry = readdir(dir)) {
+                    struct stat info = {};
+                    if (stat((driverDir + "/" + entry->d_name).c_str(), &info) == 0 && S_ISREG(info.st_mode)) {
+                        driverBytes += info.st_size;
+                        driverFiles++;
+                    }
+                }
+                closedir(dir);
+            }
+            char line[128];
+            snprintf(line, sizeof(line), "B graphics-warmup shaders=%zu ms=%lu driver-cache files=%d kb=%llu",
+                     shaders.size(), (Switch2Debug_Micros() - warmStart) / 1000, driverFiles, driverBytes / 1024);
+            Switch2Debug_Log(line);
+        }
+    }
+    SwitchLoading_Finish();
+#endif
+}
+
 extern "C" void DeinitOTR() {
     SaveManager_ThreadPoolWait();
     WaitForRandoGeneration();
@@ -1650,6 +1797,11 @@ extern "C" void DeinitOTR() {
     sohFast3dWindow = nullptr;
 
     OTRGlobals::Instance->context = nullptr;
+#ifdef __SWITCH__
+    // Close GL and SDL now that the audio thread and GUI are gone, so the app
+    // returns to the homebrew menu.
+    Ship::Context::DestroyInstance();
+#endif
 }
 
 #ifdef _WIN32
@@ -1798,7 +1950,9 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
     }
 
     // Process window events for resize, mouse, keyboard events
+    Switch2Prof_Begin(SW2P_EVENTS);
     wnd->HandleEvents();
+    Switch2Prof_End(SW2P_EVENTS);
 
     auto intp = wnd->GetInterpreterWeak().lock().get();
     intp->mInterpolationIndex = 0;
@@ -1870,12 +2024,15 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
         count = 1;
     }
 
+    Switch2Debug_Phase(1, "draw");
     RunCommands(commands, start_time, step, next_original_frame, count);
+    Switch2Debug_Phase(1, "game");
 
     last_fps = fps;
     last_update_rate = R_UPDATE_RATE;
 
     {
+        SWITCH2_PROF(SW2P_AUDIO_WAIT);
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
             audio.cv_from_thread.wait(Lock);
@@ -1926,6 +2083,12 @@ std::map<std::string, SoundFontSample*> cachedCustomSFs;
 
 ImFont* OTRGlobals::CreateFontWithSize(float size, std::string fontPath, bool isJapaneseFont) {
     auto mImGuiIo = &ImGui::GetIO();
+#ifdef __SWITCH2__
+    // The Switch 2 draws the UI at 1080p on a handheld screen: make the fonts
+    // 1.5x, at their real size so that they stay sharp (the menu's padding is
+    // scaled in SohGui/Switch2UiScale.h).
+    size *= 1.5f;
+#endif
     ImFont* font;
     if (fontPath == "") {
         ImFontConfig fontCfg = ImFontConfig();

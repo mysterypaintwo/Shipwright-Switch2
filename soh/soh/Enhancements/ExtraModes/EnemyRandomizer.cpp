@@ -29,6 +29,8 @@ extern "C" {
 #include "src/overlays/actors/ovl_En_Skb/z_en_skb.h"
 #include "src/overlays/actors/ovl_En_Tp/z_en_tp.h"
 
+#undef quad // newlib <sys/types.h> defines it as a macro
+
 extern PlayState* gPlayState;
 extern int gMapLoading;
 }

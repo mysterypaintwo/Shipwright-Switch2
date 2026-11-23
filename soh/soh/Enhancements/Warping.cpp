@@ -103,12 +103,26 @@ void Warp(WarpPoint& warpPoint) {
 
 static std::string warpNameInput = "";
 
+#ifdef __SWITCH2__
+// UIWidgets buttons push their own padding, which Switch2UiScale.h makes 3x.
+static float WarpButtonWidth(const char* icon) {
+    return ImGui::CalcTextSize(icon).x + UIWidgets::ButtonOptions{}.padding.x * 3.0f * 2.0f;
+}
+#endif
+
 void WarpPointsWidget(WidgetInfo& info) {
     ImGui::SeparatorText("Warp Points");
     if (gPlayState != NULL && GET_PLAYER(gPlayState) != NULL) {
+#ifdef __SWITCH2__
+        // Leave room for the whole + button at the console's larger padding.
+        const float addButtonWidth = WarpButtonWidth(ICON_FA_PLUS);
+        const float nameWidth = ImGui::GetContentRegionAvail().x - addButtonWidth - ImGui::GetStyle().ItemSpacing.x;
+#else
+        const float nameWidth = ImGui::GetContentRegionAvail().x - 50.0f;
+#endif
         UIWidgets::InputString("##WarpPointNameInput", &warpNameInput,
                                {
-                                   .size = ImVec2(ImGui::GetContentRegionAvail().x - 50.0f, 0.0f),
+                                   .size = ImVec2(nameWidth, 0.0f),
                                    .placeholder = "Enter warp point name...",
                                });
 
@@ -118,7 +132,11 @@ void WarpPointsWidget(WidgetInfo& info) {
             ImGui::BeginDisabled();
         }
 
+#ifdef __SWITCH2__
+        if (UIWidgets::Button(ICON_FA_PLUS, { .size = UIWidgets::Sizes::Inline })) {
+#else
         if (UIWidgets::Button(ICON_FA_PLUS)) {
+#endif
             Player* player = GET_PLAYER(gPlayState);
 
             std::string warpName = SohUtils::GetSceneName(gPlayState->sceneNum);
@@ -149,7 +167,13 @@ void WarpPointsWidget(WidgetInfo& info) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.85f, 0.55f, 0.0f, 1.0f), "[Boot]");
         }
+#ifdef __SWITCH2__
+        const float rowButtons = WarpButtonWidth(ICON_FA_PLANE) + WarpButtonWidth(ICON_FA_REFRESH) +
+                                 WarpButtonWidth(ICON_FA_TRASH) + ImGui::GetStyle().ItemSpacing.x * 2;
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - rowButtons);
+#else
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 115.0f);
+#endif
         if (gPlayState == NULL)
             ImGui::BeginDisabled();
         if (UIWidgets::Button(ICON_FA_PLANE, { .size = UIWidgets::Sizes::Inline })) {

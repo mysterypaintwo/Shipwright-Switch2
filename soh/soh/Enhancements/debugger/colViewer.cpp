@@ -15,6 +15,8 @@ extern "C" {
 #include "functions.h"
 #include "macros.h"
 #include "overlays/actors/ovl_En_Kakasi2/z_en_kakasi2.h"
+#undef quad // newlib <sys/types.h> defines it as a macro
+
 extern PlayState* gPlayState;
 }
 

@@ -1,4 +1,5 @@
 #include "global.h"
+#include "ship/port/switch/Switch2Debug.h"
 #include "vt.h"
 
 #include <string.h>
@@ -1679,13 +1680,20 @@ void Play_Main(GameState* thisx) {
     }
 
     if ((HREG(80) != 10) || (HREG(81) != 0)) {
+        Switch2Debug_Phase(1, "game:play-update");
+        Switch2Prof_SetScene(play->sceneNum);
+        Switch2Prof_Begin(SW2P_PLAY_UPDATE);
         Play_Update(play);
+        Switch2Prof_End(SW2P_PLAY_UPDATE);
     }
 
     PLAY_LOG(4583);
 
     FrameInterpolation_StartRecord();
+    Switch2Debug_Phase(1, "game:play-draw");
+    Switch2Prof_Begin(SW2P_PLAY_DRAW);
     Play_Draw(play);
+    Switch2Prof_End(SW2P_PLAY_DRAW);
     FrameInterpolation_StopRecord();
 
     PLAY_LOG(4587);

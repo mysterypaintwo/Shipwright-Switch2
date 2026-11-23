@@ -1,4 +1,5 @@
 #include "global.h"
+#include "ship/port/switch/Switch2Debug.h"
 #include "vt.h"
 #include "regs.h"
 
@@ -294,7 +295,11 @@ void Graph_Update(GraphicsContext* gfxCtx, GameState* gameState) {
     CLOSE_DISPS(gfxCtx);
 
     GameState_ReqPadData(gameState);
+    Switch2Debug_Phase(1, "game:state-update");
+    Switch2Prof_Tick();
+    Switch2Prof_Begin(SW2P_GAME);
     GameState_Update(gameState);
+    Switch2Prof_End(SW2P_GAME);
 
     OPEN_DISPS(gfxCtx);
 

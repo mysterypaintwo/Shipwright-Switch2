@@ -10,6 +10,10 @@
 #include <soh/Enhancements/bootcommands.h>
 #include "soh/OTRGlobals.h"
 #include "soh/CrashHandlerExt.h"
+#include "ship/port/switch/Switch2Debug.h"
+#include "ship/port/switch/SwitchLoading.h"
+
+void OTRPrepareShaders(void);
 
 s32 gScreenWidth = SCREEN_WIDTH;
 s32 gScreenHeight = SCREEN_HEIGHT;
@@ -66,7 +70,9 @@ int main(int argc, char* argv[]) {
     CrashHandlerRegisterCallback(CrashHandler_PrintSohData);
     BootCommands_Init();
 
+    SwitchLoading_Stage("Loading audio", 0.20f, 0.60f);
     Heaps_Alloc();
+    Switch2Debug_BootMark("heaps");
     Main(0);
     DeinitOTR();
     Heaps_Free();
@@ -139,6 +145,9 @@ void Main(void* arg) {
     osCreateThread(&sGraphThread, 4, Graph_ThreadEntry, arg, sGraphStack + sizeof(sGraphStack), Z_PRIORITY_GRAPH);
     osStartThread(&sGraphThread);
     osSetThreadPri(0, Z_PRIORITY_SCHED);
+
+    Switch2Debug_BootMark("audio-init");
+    OTRPrepareShaders();
 
     Graph_ThreadEntry(0);
 

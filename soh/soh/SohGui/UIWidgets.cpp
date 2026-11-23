@@ -9,6 +9,8 @@
 #include <ship/Context.h>
 #include "soh/OTRGlobals.h"
 #include "soh/ShipInit.hpp"
+// Last include: on Switch 2 it scales the sizes pushed with ImGui::PushStyleVar.
+#include "soh/SohGui/Switch2UiScale.h"
 
 namespace UIWidgets {
 

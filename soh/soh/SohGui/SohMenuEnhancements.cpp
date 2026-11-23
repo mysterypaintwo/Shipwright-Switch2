@@ -1,4 +1,7 @@
 ﻿#include "SohMenu.h"
+#ifdef __SWITCH__
+#include "soh/Enhancements/QoL/SaveStateControls.h"
+#endif
 #include <soh/Enhancements/enhancementTypes.h>
 #include "soh/Enhancements/SwitchAge.h"
 #include "soh/Enhancements/AdultMasks.h"
@@ -337,6 +340,35 @@ void SohMenu::AddMenuEnhancements() {
         })
         .CVar(CVAR_ENHANCEMENT("ReworkedTargeting.Btn"))
         .Options(BtnSelectorOptions().Tooltip("Buttons to activate target switching."));
+
+#ifdef __SWITCH__
+    AddWidget(path, "Right Stick Aiming", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("Controls.RightStickAim"))
+        .Options(CheckboxOptions().Tooltip("Aim with the right stick in C-Up view and with first-person items."));
+    AddWidget(path, "Move while aiming", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("MoveInFirstPerson"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0); })
+        .Options(CheckboxOptions().Tooltip("The left stick moves Link while the right stick aims."));
+    AddWidget(path, "Gyro Aiming", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("GyroAiming.Enabled"))
+        .Options(CheckboxOptions().Tooltip("Aim in first person by moving the console or controller."));
+    AddWidget(path, "Invert Gyro X Axis", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("GyroAiming.InvertX"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0); })
+        .Options(CheckboxOptions().Tooltip("Inverts horizontal gyro aiming."));
+    AddWidget(path, "Invert Gyro Y Axis", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("GyroAiming.InvertY"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0); })
+        .Options(CheckboxOptions().Tooltip("Inverts vertical gyro aiming."));
+    AddWidget(path, "Gyro X Axis Sensitivity: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("GyroAiming.SensitivityX"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0); })
+        .Options(FloatSliderOptions().Tooltip("Horizontal gyro sensitivity.").DefaultValue(1.0f).IsPercentage().Min(0.01f).Max(2.0f));
+    AddWidget(path, "Gyro Y Axis Sensitivity: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("GyroAiming.SensitivityY"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("GyroAiming.Enabled"), 0); })
+        .Options(FloatSliderOptions().Tooltip("Vertical gyro sensitivity.").DefaultValue(1.0f).IsPercentage().Min(0.01f).Max(2.0f));
+#endif
 
     AddWidget(path, "Item Count Messages", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Gold Skulltula Tokens", WIDGET_CVAR_CHECKBOX)
@@ -1318,7 +1350,13 @@ void SohMenu::AddMenuEnhancements() {
         .Options(
             ComboboxOptions()
                 .ComboMap(zFightingOptions)
+                
+#ifdef __SWITCH2__
+                .DefaultIndex(ZFIGHT_FIX_NO_VANISH)
+#else
                 .DefaultIndex(ZFIGHT_FIX_DISABLED)
+#endif
+
                 .Tooltip("Disabled: Paths vanish more the higher the resolution (Z-Fighting is based on resolution).\n"
                          "Consistent: Certain paths vanish the same way in all resolutions.\n"
                          "No Vanish: Paths do not vanish, Link seems to sink in to some paths.\n"
@@ -2102,6 +2140,27 @@ void SohMenu::AddMenuEnhancements() {
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_CHEAT("SaveStatePromise"), 0) == 0; })
         .CVar(CVAR_CHEAT("SaveStatesEnabled"))
         .Options(CheckboxOptions().Tooltip("F5 to save, F6 to change slots, F7 to load"));
+#ifdef __SWITCH__
+    static const auto hideWithoutSaveStates = [](WidgetInfo& info) {
+        info.isHidden = CVarGetInteger(CVAR_CHEAT("SaveStatePromise"), 0) == 0 ||
+                        CVarGetInteger(CVAR_CHEAT("SaveStatesEnabled"), 0) == 0;
+    };
+    AddWidget(path, "Save State", WIDGET_BUTTON)
+        .PreFunc(hideWithoutSaveStates)
+        .Callback([](WidgetInfo& info) { SaveStateControls_Save(); })
+        .Options(ButtonOptions().Tooltip("Saves to the current slot."));
+    AddWidget(path, "Load State", WIDGET_BUTTON)
+        .PreFunc(hideWithoutSaveStates)
+        .Callback([](WidgetInfo& info) { SaveStateControls_Load(); })
+        .Options(ButtonOptions().Tooltip("Loads from the current slot."));
+    AddWidget(path, "Next Slot", WIDGET_BUTTON)
+        .PreFunc(hideWithoutSaveStates)
+        .Callback([](WidgetInfo& info) { SaveStateControls_NextSlot(); })
+        .Options(ButtonOptions().Tooltip("Changes the slot used by Save State and Load State (1 to 6)."));
+    AddWidget(path, "Map Save State and Load State to your controller in Settings > Controls, under Save States.",
+              WIDGET_TEXT)
+        .PreFunc(hideWithoutSaveStates);
+#endif
 
     AddWidget(path, "Beta Quest", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Enable Beta Quest", WIDGET_CVAR_CHECKBOX)

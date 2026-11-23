@@ -175,6 +175,8 @@ if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
         "soh/Extractor/*.hpp"
     )
 else()
+    # No ROM extraction on console: game data is prepared on a PC.
+    list(FILTER soh__ EXCLUDE REGEX "soh/Extractor/.*\\.(c|cpp)$")
     file(GLOB_RECURSE soh__Extractor CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
         "soh/Extractor/*.h"
         "soh/Extractor/*.hpp"
@@ -527,6 +529,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
             $<$<COMPILE_LANGUAGE:C>:
                 -Werror-implicit-function-declaration
                 -Wno-incompatible-pointer-types
+                -Wno-int-conversion
+                -Wno-implicit-int
             >
             $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
             $<$<COMPILE_LANGUAGE:CXX>:
@@ -614,10 +618,10 @@ add_custom_command(
 ################################################################################
 # Dependencies
 ################################################################################
-add_dependencies(${PROJECT_NAME}
-    libultraship
-    torch
-)
+add_dependencies(${PROJECT_NAME} libultraship)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
+    add_dependencies(${PROJECT_NAME} torch)
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     find_package(glfw3 REQUIRED)
@@ -670,10 +674,17 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
     find_package(Threads REQUIRED)
     set(ADDITIONAL_LIBRARY_DEPENDENCIES
         "libultraship;"
+        -lSDL2_net
         SDL2::SDL2
         -lglad
         Threads::Threads
+        -lvorbisfile
+        -lvorbis
+        -lopusfile
+        -lopus
+        -logg
     )
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${DEVKITPRO}/portlibs/switch/include/opus)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
     find_package(SDL2 REQUIRED)
     set(ADDITIONAL_LIBRARY_DEPENDENCIES
@@ -776,10 +787,26 @@ endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch")
 
+# The homebrew menu sorts by title. On Switch 2 both ports start with
+# "HarbourMasters - " so they are listed next to each other.
+if (NINTENDO_SWITCH2)
+    set(NACP_TITLE "HarbourMasters - Shipwright")
+else()
+    set(NACP_TITLE "Ship of Harkinian")
+endif()
+
+# The version shown in the homebrew menu. PROJECT_VERSION stays upstream's,
+# because oot.o2r is checked against it.
+if (NINTENDO_SWITCH2)
+    set(NACP_VERSION "1.1")
+else()
+    set(NACP_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+endif()
+
 nx_generate_nacp(Ship.nacp
-   NAME "Ship of Harkinian"
-   AUTHOR "${PROJECT_TEAM}"
-   VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
+   NAME "${NACP_TITLE}"
+   AUTHOR "${PROJECT_TEAM}, mysterypaint"
+   VERSION "${NACP_VERSION}"
 )
 
 nx_create_nro(soh

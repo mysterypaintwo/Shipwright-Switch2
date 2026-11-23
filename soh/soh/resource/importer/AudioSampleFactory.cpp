@@ -11,6 +11,11 @@ extern "C" {
 #include "z64audio.h"
 }
 
+// The synthesizer loads ADPCM samples in aligned chunks, and the last chunk can
+// run past the end of the sample. Zeroed padding keeps that read inside the
+// allocation (it faulted on Switch 2) without shortening any sound.
+static constexpr size_t kSampleReadPadding = 256;
+
 #define DR_WAV_IMPLEMENTATION
 #include <dr_wav.h>
 
@@ -210,7 +215,7 @@ ResourceFactoryBinaryAudioSampleV2::ReadResource(std::shared_ptr<Ship::File> fil
     audioSample->sample.isRelocated = reader->ReadUByte();
     audioSample->sample.size = reader->ReadUInt32();
 
-    audioSample->sample.sampleAddr = new uint8_t[audioSample->sample.size];
+    audioSample->sample.sampleAddr = new uint8_t[audioSample->sample.size + kSampleReadPadding]();
     for (uint32_t i = 0; i < audioSample->sample.size; i++) {
         audioSample->sample.sampleAddr[i] = reader->ReadUByte();
     }
@@ -328,7 +333,7 @@ ResourceFactoryXMLAudioSampleV0::ReadResource(std::shared_ptr<Ship::File> file,
         }
     }
     // Not a normal streamed sample. Fallback to the original ADPCM sample to be decoded by the audio engine.
-    audioSample->sample.sampleAddr = new uint8_t[size];
+    audioSample->sample.sampleAddr = new uint8_t[size + kSampleReadPadding]();
     // Can't use memcpy due to endianness issues.
     for (uint32_t i = 0; i < size; i++) {
         audioSample->sample.sampleAddr[i] = sampleFile->Buffer.get()->data()[i];
